@@ -6,6 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface HealthStatus {
-  status: string;
+export interface Role {
+  id: string;
+  name: string;
+  goal1: string;
+  goal2: string;
 }

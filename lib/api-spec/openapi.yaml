@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: planner
+    description: Weekly planner operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,61 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /planner/data:
+    get:
+      operationId: getPlannerData
+      tags: [planner]
+      summary: Get the current planner data
+      responses:
+        "200":
+          description: Current planner data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlannerData"
+        "401":
+          description: Unauthorized
+    put:
+      operationId: savePlannerData
+      tags: [planner]
+      summary: Save the current planner data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlannerDataInput"
+      responses:
+        "200":
+          description: Saved planner data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlannerData"
+        "401":
+          description: Unauthorized
+  /planner/analyze:
+    post:
+      operationId: analyzePlannerReview
+      tags: [planner]
+      summary: Analyze weekly goal review
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewAnalysisInput"
+      responses:
+        "200":
+          description: Goal-by-goal review analysis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewAnalysis"
+        "401":
+          description: Unauthorized
+        "502":
+          description: Upstream analysis service failure
 components:
   schemas:
     HealthStatus:
@@ -33,4 +90,140 @@ components:
           type: string
       required:
         - status
+    Role:
+      type: object
+      required: [id, name, goal1, goal2]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        goal1:
+          type: string
+        goal2:
+          type: string
+    Schedule:
+      type: object
+      required: [السبت, الأحد, الاثنين, الثلاثاء, الأربعاء, الخميس, الجمعة]
+      properties:
+        السبت:
+          type: string
+        الأحد:
+          type: string
+        الاثنين:
+          type: string
+        الثلاثاء:
+          type: string
+        الأربعاء:
+          type: string
+        الخميس:
+          type: string
+        الجمعة:
+          type: string
+    ReviewEntry:
+      type: object
+      required: [roleId, roleName, goalField, goalText, statusVal, reason, advice, concept]
+      properties:
+        roleId:
+          type: string
+        roleName:
+          type: string
+        goalField:
+          type: string
+        goalText:
+          type: string
+        statusVal:
+          type: string
+        reason:
+          type: string
+        advice:
+          type: string
+        concept:
+          type: string
+    Review:
+      type: object
+      required: [entries, message, completedAt]
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReviewEntry"
+        message:
+          type: string
+        completedAt:
+          type: string
+    PlannerData:
+      type: object
+      required: [weekEndDate, roles, schedule, reflection]
+      properties:
+        weekEndDate:
+          type: string
+        roles:
+          type: array
+          items:
+            $ref: "#/components/schemas/Role"
+        schedule:
+          $ref: "#/components/schemas/Schedule"
+        reflection:
+          type: string
+        review:
+          oneOf:
+            - $ref: "#/components/schemas/Review"
+            - type: "null"
+    PlannerDataInput:
+      type: object
+      required: [weekEndDate, roles, schedule, reflection]
+      properties:
+        weekEndDate:
+          type: string
+        roles:
+          type: array
+          items:
+            $ref: "#/components/schemas/Role"
+        schedule:
+          $ref: "#/components/schemas/Schedule"
+        reflection:
+          type: string
+        review:
+          oneOf:
+            - $ref: "#/components/schemas/Review"
+            - type: "null"
+    ReviewAnalysisEntry:
+      type: object
+      required: [role, goal, status, reason]
+      properties:
+        role:
+          type: string
+        goal:
+          type: string
+        status:
+          type: string
+        reason:
+          type: ["string", "null"]
+    ReviewAnalysisInput:
+      type: object
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReviewAnalysisEntry"
+    ReviewAnalysisItem:
+      type: object
+      required: [advice, concept]
+      properties:
+        advice:
+          type: string
+        concept:
+          type: string
+    ReviewAnalysis:
+      type: object
+      required: [items, message]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReviewAnalysisItem"
+        message:
+          type: string
 
