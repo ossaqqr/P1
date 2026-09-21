@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ClerkProvider, SignIn, SignUp, useAuth, useClerk, useUser } from '@clerk/react';
-import { publishableKeyFromHost } from '@clerk/react/internal';
 import { shadcn } from '@clerk/themes';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import {
   getGetPlannerDataQueryKey,
+  setAuthTokenGetter,
   useAnalyzePlannerReview,
   useGetPlannerData,
   useSavePlannerData,
@@ -17,6 +17,8 @@ import { Redirect, Route, Router as WouterRouter, Switch, Link, useLocation } fr
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
 import NotFound from '@/pages/not-found';
 
 const queryClient = new QueryClient();
@@ -32,11 +34,7 @@ type ReviewFormEntry = {
 };
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
-const clerkPubKey = publishableKeyFromHost(
-  window.location.hostname,
-  import.meta.env.VITE_CLERK_PUBLISHABLE_KEY,
-);
-const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
+const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
 function stripBase(path: string) {
   return basePath && path.startsWith(basePath)
@@ -215,7 +213,7 @@ function PlannerPage() {
   const [reviewEntries, setReviewEntries] = useState<ReviewFormEntry[]>([]);
   const [analyzeError, setAnalyzeError] = useState('');
   const initializedForUser = useRef<string | null>(null);
-  const dateInputRef = useRef<HTMLInputElement>(null);
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const saveQueueRef = useRef(Promise.resolve());
 
   useEffect(() => {
@@ -248,21 +246,11 @@ function PlannerPage() {
     await saveTask;
   }, [queryClient, saveMutation]);
 
-  const openDatePicker = () => {
-    const input = dateInputRef.current;
-    if (!input) return;
-
-    input.focus({ preventScroll: true });
-    const pickerInput = input as HTMLInputElement & { showPicker?: () => void };
-    try {
-      if (typeof pickerInput.showPicker === 'function') {
-        pickerInput.showPicker();
-      } else {
-        input.click();
-      }
-    } catch {
-      input.click();
-    }
+  const selectWeekEndDate = (date: Date | undefined) => {
+    if (!date) return;
+    const iso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    void save({ ...data, weekEndDate: iso });
+    setIsDatePickerOpen(false);
   };
 
   const updateRole = (id: string, field: keyof Role, value: string) => {
@@ -461,19 +449,27 @@ function PlannerPage() {
               </>
             ) : <p className="m-0 text-sm text-muted-foreground" data-testid="text-date-empty">حدد الأسبوع عشان تقدر تراجعه في وقته</p>}
           </div>
-          <button type="button" onClick={openDatePicker} className="planner-button relative inline-flex cursor-pointer items-center gap-1.5 overflow-hidden" data-testid="label-week-end-date">
-            {data.weekEndDate ? 'تغيير التاريخ' : 'حدد التاريخ'}
-          </button>
-          <input
-            ref={dateInputRef}
-            type="date"
-            value={data.weekEndDate}
-            onChange={(event) => void save({ ...data, weekEndDate: event.target.value })}
-            className="sr-only"
-            tabIndex={-1}
-            aria-hidden="true"
-            data-testid="input-week-end-date"
-          />
+          <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="planner-button inline-flex items-center gap-1.5"
+                data-testid="label-week-end-date"
+              >
+                {data.weekEndDate ? 'تغيير التاريخ' : 'حدد التاريخ'}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-auto p-0" data-testid="popover-week-end-date">
+              <Calendar
+                mode="single"
+                dir="rtl"
+                selected={data.weekEndDate ? new Date(`${data.weekEndDate}T00:00:00`) : undefined}
+                onSelect={selectWeekEndDate}
+                autoFocus
+                data-testid="calendar-week-end-date"
+              />
+            </PopoverContent>
+          </Popover>
         </div>
 
         <section className="mb-8" data-testid="section-roles">
@@ -561,6 +557,14 @@ function ClerkQueryClientCacheInvalidator() {
   return null;
 }
 
+function ClerkAuthTokenBridge() {
+  const { getToken } = useAuth();
+  useEffect(() => {
+    setAuthTokenGetter(() => getToken());
+  }, [getToken]);
+  return null;
+}
+
 function RoutedErrorBoundary({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   return <ErrorBoundary resetKey={location}>{children}</ErrorBoundary>;
@@ -620,7 +624,6 @@ function ClerkProviderWithRoutes() {
   return (
     <ClerkProvider
       publishableKey={clerkPubKey}
-      proxyUrl={clerkProxyUrl}
       appearance={clerkAppearance}
       signInUrl={`${basePath}/sign-in`}
       signUpUrl={`${basePath}/sign-up`}
@@ -633,6 +636,7 @@ function ClerkProviderWithRoutes() {
     >
       <QueryClientProvider client={queryClient}>
         <ClerkQueryClientCacheInvalidator />
+        <ClerkAuthTokenBridge />
         <RoutedErrorBoundary>
           <Switch>
             <Route path="/" component={HomeRedirect} />
