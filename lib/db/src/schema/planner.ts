@@ -7,6 +7,10 @@ export const plannerDataTable = pgTable("planner_data", {
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
+  // Set once this user's legacy blob has been migrated into the relational
+  // tables below and validated. Never cleared, never used to delete the
+  // legacy row — it only gates the migration from re-running.
+  migratedAt: timestamp("migrated_at", { withTimezone: true }),
 });
 
 export type PlannerDataRecord = typeof plannerDataTable.$inferSelect;
