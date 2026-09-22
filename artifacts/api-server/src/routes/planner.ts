@@ -9,6 +9,7 @@ import {
 } from "@workspace/api-zod";
 import { db, plannerDataTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { migrateLegacyPlannerData } from "../lib/legacyMigration";
 
 const router: IRouter = Router();
 
@@ -47,6 +48,7 @@ const defaultPlannerData = () => ({
 router.get("/planner/data", requireAuth, async (req, res) => {
   try {
     const userId = res.locals.userId as string;
+    await migrateLegacyPlannerData(userId, req.log);
     const existing = await db
       .select()
       .from(plannerDataTable)
