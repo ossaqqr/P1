@@ -3,10 +3,13 @@ import { ClerkProvider, SignIn, SignUp, useAuth, useClerk, useUser } from '@cler
 import { shadcn } from '@clerk/themes';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import {
+  getGetMissionQueryKey,
   getGetPlannerDataQueryKey,
   setAuthTokenGetter,
   useAnalyzePlannerReview,
+  useGetMission,
   useGetPlannerData,
+  useSaveMission,
   useSavePlannerData,
   type PlannerData,
   type ReviewAnalysisEntry,
@@ -19,6 +22,10 @@ import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
 import NotFound from '@/pages/not-found';
 
 const queryClient = new QueryClient();
@@ -214,6 +221,7 @@ function PlannerPage() {
   const [analyzeError, setAnalyzeError] = useState('');
   const initializedForUser = useRef<string | null>(null);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [missionOpen, setMissionOpen] = useState(false);
   const saveQueueRef = useRef(Promise.resolve());
 
   useEffect(() => {
@@ -432,7 +440,8 @@ function PlannerPage() {
   return (
     <div className="planner-shell" dir="rtl" data-testid="planner-page">
       <div className="planner-wrap">
-        <PlannerHeader onReview={openReviewIntro} />
+        <PlannerHeader onReview={openReviewIntro} onMission={() => setMissionOpen(true)} />
+        <MissionDialog open={missionOpen} onOpenChange={setMissionOpen} />
         {data.review && (
           <div className="planner-card mb-4 flex items-center justify-between gap-3 border-[#c0dd97] bg-[#eaf3de]" data-testid="status-review-complete">
             <span className="text-[13px] text-[#27500a]">الأسبوع ده اتراجع بالفعل</span>
@@ -520,7 +529,75 @@ function PlannerPage() {
   );
 }
 
-function PlannerHeader({ onReview }: { onReview: () => void }) {
+function MissionDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const missionQuery = useGetMission({ query: { enabled: open, queryKey: getGetMissionQueryKey() } });
+  const saveMissionMutation = useSaveMission();
+  const [missionStatement, setMissionStatement] = useState('');
+  const [principles, setPrinciples] = useState('');
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (missionQuery.data) {
+      setMissionStatement(missionQuery.data.missionStatement);
+      setPrinciples(missionQuery.data.principles);
+    }
+  }, [missionQuery.data]);
+
+  const handleSave = () => {
+    setSaved(false);
+    saveMissionMutation.mutate(
+      { data: { missionStatement, principles } },
+      { onSuccess: () => { setSaved(true); setTimeout(() => setSaved(false), 1500); } },
+    );
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent dir="rtl" className="max-h-[85vh] overflow-y-auto" data-testid="dialog-mission">
+        <DialogHeader>
+          <DialogTitle>رسالتي الشخصية</DialogTitle>
+          <DialogDescription>القيم والاتجاه اللي بتحدد أولوياتك — ارجع لها كل ما تخطط أسبوعك.</DialogDescription>
+        </DialogHeader>
+        {missionQuery.isLoading ? (
+          <p className="text-sm text-muted-foreground">بيتحمل...</p>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <div>
+              <Label htmlFor="mission-statement" className="mb-1.5 block text-xs text-muted-foreground">رسالة حياتك</Label>
+              <Textarea
+                id="mission-statement"
+                value={missionStatement}
+                onChange={(e) => setMissionStatement(e.target.value)}
+                placeholder="إيه أهم حاجة عايز حياتك تقوم عليها؟"
+                rows={4}
+                data-testid="input-mission-statement"
+              />
+            </div>
+            <div>
+              <Label htmlFor="mission-principles" className="mb-1.5 block text-xs text-muted-foreground">مبادئك وقيمك</Label>
+              <Textarea
+                id="mission-principles"
+                value={principles}
+                onChange={(e) => setPrinciples(e.target.value)}
+                placeholder="القيم اللي بتحكم قراراتك..."
+                rows={4}
+                data-testid="input-mission-principles"
+              />
+            </div>
+          </div>
+        )}
+        <DialogFooter className="mt-2 flex-row items-center justify-between sm:justify-between">
+          <span className="text-xs text-muted-foreground">{saved ? 'اتحفظ' : ''}</span>
+          <Button onClick={handleSave} disabled={saveMissionMutation.isPending} data-testid="button-save-mission">
+            {saveMissionMutation.isPending ? 'بيتحفظ...' : 'حفظ'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function PlannerHeader({ onReview, onMission }: { onReview: () => void; onMission: () => void }) {
   const { signOut } = useClerk();
   return (
     <div className="mb-6 flex items-start justify-between gap-3" data-testid="planner-header">
@@ -529,6 +606,7 @@ function PlannerHeader({ onReview }: { onReview: () => void }) {
         <p className="mt-1 text-sm text-muted-foreground" data-testid="text-planner-subtitle">الأدوار ← الأهداف ← الجدول ← التكيف اليومي</p>
       </div>
       <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
+        <button type="button" onClick={onMission} className="planner-button whitespace-nowrap" data-testid="button-open-mission">رسالتي الشخصية</button>
         <button type="button" onClick={onReview} className="planner-button whitespace-nowrap" data-testid="button-open-review">مراجعة الأسبوع</button>
         <button type="button" onClick={() => void signOut({ redirectUrl: basePath || '/' })} className="planner-button inline-flex items-center gap-1.5 text-muted-foreground" data-testid="button-sign-out"><LogOut className="size-3.5" /><span className="hidden sm:inline">خروج</span></button>
       </div>
