@@ -12,6 +12,8 @@ tags:
     description: Health operations
   - name: planner
     description: Weekly planner operations
+  - name: mission
+    description: Personal mission and principles
 paths:
   /healthz:
     get:
@@ -81,6 +83,39 @@ paths:
           description: Unauthorized
         "502":
           description: Upstream analysis service failure
+  /mission:
+    get:
+      operationId: getMission
+      tags: [mission]
+      summary: Get the user's personal mission and principles
+      responses:
+        "200":
+          description: Current mission
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Mission"
+        "401":
+          description: Unauthorized
+    put:
+      operationId: saveMission
+      tags: [mission]
+      summary: Save the user's personal mission and principles
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MissionInput"
+      responses:
+        "200":
+          description: Saved mission
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Mission"
+        "401":
+          description: Unauthorized
 components:
   schemas:
     HealthStatus:
@@ -225,5 +260,21 @@ components:
           items:
             $ref: "#/components/schemas/ReviewAnalysisItem"
         message:
+          type: string
+    Mission:
+      type: object
+      required: [missionStatement, principles]
+      properties:
+        missionStatement:
+          type: string
+        principles:
+          type: string
+    MissionInput:
+      type: object
+      required: [missionStatement, principles]
+      properties:
+        missionStatement:
+          type: string
+        principles:
           type: string
 
