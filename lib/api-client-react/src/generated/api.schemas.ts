@@ -81,3 +81,13 @@ export interface ReviewAnalysis {
   message: string;
 }
 
+export interface Mission {
+  missionStatement: string;
+  principles: string;
+}
+
+export interface MissionInput {
+  missionStatement: string;
+  principles: string;
+}
+

@@ -21,6 +21,8 @@ import type {
 
 import type {
   HealthStatus,
+  Mission,
+  MissionInput,
   PlannerData,
   PlannerDataInput,
   ReviewAnalysis,
@@ -349,5 +351,153 @@ export const useAnalyzePlannerReview = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getAnalyzePlannerReviewMutationOptions(options));
+    }
+
+export const getGetMissionUrl = () => {
+
+
+
+
+  return `/api/mission`
+}
+
+/**
+ * @summary Get the user's personal mission and principles
+ */
+export const getMission = async ( options?: Parameters<typeof customFetch>[1]): Promise<Mission> => {
+
+  return customFetch<Mission>(getGetMissionUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMissionQueryKey = () => {
+    return [
+    `/api/mission`
+    ] as const;
+    }
+
+
+export const getGetMissionQueryOptions = <TData = Awaited<ReturnType<typeof getMission>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMission>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMissionQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMission>>> = ({ signal }) => getMission({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMission>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMissionQueryResult = NonNullable<Awaited<ReturnType<typeof getMission>>>
+export type GetMissionQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get the user's personal mission and principles
+ */
+
+export function useGetMission<TData = Awaited<ReturnType<typeof getMission>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMission>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMissionQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSaveMissionUrl = () => {
+
+
+
+
+  return `/api/mission`
+}
+
+/**
+ * @summary Save the user's personal mission and principles
+ */
+export const saveMission = async (missionInput: MissionInput, options?: Parameters<typeof customFetch>[1]): Promise<Mission> => {
+
+  return customFetch<Mission>(getSaveMissionUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(missionInput)
+  }
+);}
+
+
+
+
+
+export const getSaveMissionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveMission>>, TError,{data: BodyType<MissionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof saveMission>>, TError,{data: BodyType<MissionInput>}, TContext> => {
+
+const mutationKey = ['saveMission'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof saveMission>>, {data: BodyType<MissionInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  saveMission(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SaveMissionMutationResult = NonNullable<Awaited<ReturnType<typeof saveMission>>>
+    export type SaveMissionMutationBody = BodyType<MissionInput>
+    export type SaveMissionMutationError = ErrorType<void>
+
+    /**
+ * @summary Save the user's personal mission and principles
+ */
+export const useSaveMission = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveMission>>, TError,{data: BodyType<MissionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof saveMission>>,
+        TError,
+        {data: BodyType<MissionInput>},
+        TContext
+      > => {
+      return useMutation(getSaveMissionMutationOptions(options));
     }
 
