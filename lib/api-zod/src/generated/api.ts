@@ -148,3 +148,26 @@ export const AnalyzePlannerReviewResponse = zod.object({
 })
 
 
+/**
+ * @summary Get the user's personal mission and principles
+ */
+export const GetMissionResponse = zod.object({
+  "missionStatement": zod.string(),
+  "principles": zod.string()
+})
+
+
+/**
+ * @summary Save the user's personal mission and principles
+ */
+export const SaveMissionBody = zod.object({
+  "missionStatement": zod.string(),
+  "principles": zod.string()
+})
+
+export const SaveMissionResponse = zod.object({
+  "missionStatement": zod.string(),
+  "principles": zod.string()
+})
+
+

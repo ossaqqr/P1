@@ -7,6 +7,8 @@
  */
 
 export * from './healthStatus';
+export * from './mission';
+export * from './missionInput';
 export * from './plannerData';
 export * from './plannerDataInput';
 export * from './review';
