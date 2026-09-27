@@ -14,6 +14,8 @@ tags:
     description: Weekly planner operations
   - name: mission
     description: Personal mission and principles
+  - name: roles
+    description: Life roles management
 paths:
   /healthz:
     get:
@@ -116,6 +118,69 @@ paths:
                 $ref: "#/components/schemas/Mission"
         "401":
           description: Unauthorized
+  /roles:
+    get:
+      operationId: listRoles
+      tags: [roles]
+      summary: List all of the user's roles (active and inactive)
+      responses:
+        "200":
+          description: Roles ordered by sortOrder
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LifeRole"
+        "401":
+          description: Unauthorized
+    post:
+      operationId: createRole
+      tags: [roles]
+      summary: Create a new role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRoleInput"
+      responses:
+        "200":
+          description: Created role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LifeRole"
+        "401":
+          description: Unauthorized
+  /roles/{roleId}:
+    patch:
+      operationId: updateRole
+      tags: [roles]
+      summary: Update a role's fields (name, description, direction, active, order)
+      parameters:
+        - name: roleId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateRoleInput"
+      responses:
+        "200":
+          description: Updated role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LifeRole"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Role not found
 components:
   schemas:
     HealthStatus:
@@ -277,4 +342,49 @@ components:
           type: string
         principles:
           type: string
+    LifeRole:
+      type: object
+      required: [id, name, description, direction, isActive, sortOrder]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        direction:
+          type: string
+          nullable: true
+        isActive:
+          type: boolean
+        sortOrder:
+          type: number
+    CreateRoleInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        direction:
+          type: string
+          nullable: true
+    UpdateRoleInput:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        direction:
+          type: string
+          nullable: true
+        isActive:
+          type: boolean
+        sortOrder:
+          type: number
 
