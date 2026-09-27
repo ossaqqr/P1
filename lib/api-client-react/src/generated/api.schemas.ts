@@ -91,3 +91,26 @@ export interface MissionInput {
   principles: string;
 }
 
+export interface LifeRole {
+  id: string;
+  name: string;
+  description: string | null;
+  direction: string | null;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export interface CreateRoleInput {
+  name: string;
+  description?: string | null;
+  direction?: string | null;
+}
+
+export interface UpdateRoleInput {
+  name?: string;
+  description?: string | null;
+  direction?: string | null;
+  isActive?: boolean;
+  sortOrder?: number;
+}
+
