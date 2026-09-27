@@ -5,12 +5,17 @@ import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/reac
 import {
   getGetMissionQueryKey,
   getGetPlannerDataQueryKey,
+  getListRolesQueryKey,
   setAuthTokenGetter,
   useAnalyzePlannerReview,
+  useCreateRole,
   useGetMission,
   useGetPlannerData,
+  useListRoles,
   useSaveMission,
   useSavePlannerData,
+  useUpdateRole,
+  type LifeRole,
   type PlannerData,
   type ReviewAnalysisEntry,
   type Role,
@@ -222,6 +227,7 @@ function PlannerPage() {
   const initializedForUser = useRef<string | null>(null);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [missionOpen, setMissionOpen] = useState(false);
+  const [rolesOpen, setRolesOpen] = useState(false);
   const saveQueueRef = useRef(Promise.resolve());
 
   useEffect(() => {
@@ -440,8 +446,9 @@ function PlannerPage() {
   return (
     <div className="planner-shell" dir="rtl" data-testid="planner-page">
       <div className="planner-wrap">
-        <PlannerHeader onReview={openReviewIntro} onMission={() => setMissionOpen(true)} />
+        <PlannerHeader onReview={openReviewIntro} onMission={() => setMissionOpen(true)} onRoles={() => setRolesOpen(true)} />
         <MissionDialog open={missionOpen} onOpenChange={setMissionOpen} />
+        <RolesDialog open={rolesOpen} onOpenChange={setRolesOpen} />
         {data.review && (
           <div className="planner-card mb-4 flex items-center justify-between gap-3 border-[#c0dd97] bg-[#eaf3de]" data-testid="status-review-complete">
             <span className="text-[13px] text-[#27500a]">الأسبوع ده اتراجع بالفعل</span>
@@ -529,6 +536,158 @@ function PlannerPage() {
   );
 }
 
+function RolesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const rolesQuery = useListRoles({ query: { enabled: open, queryKey: getListRolesQueryKey() } });
+  const queryClient = useQueryClient();
+  const createRoleMutation = useCreateRole({
+    mutation: { onSuccess: () => void queryClient.invalidateQueries({ queryKey: getListRolesQueryKey() }) },
+  });
+  const updateRoleMutation = useUpdateRole({
+    mutation: { onSuccess: () => void queryClient.invalidateQueries({ queryKey: getListRolesQueryKey() }) },
+  });
+  const [newRoleName, setNewRoleName] = useState('');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const roles = rolesQuery.data ?? [];
+  const activeRoles = roles.filter((r) => r.isActive);
+  const inactiveRoles = roles.filter((r) => !r.isActive);
+
+  const handleAddRole = () => {
+    if (!newRoleName.trim()) return;
+    createRoleMutation.mutate({ data: { name: newRoleName.trim() } });
+    setNewRoleName('');
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent dir="rtl" className="max-h-[85vh] max-w-lg overflow-y-auto" data-testid="dialog-roles">
+        <DialogHeader>
+          <DialogTitle>الأدوار</DialogTitle>
+          <DialogDescription>أدوارك في حياتك — دور معطّل بيختفي من التخطيط الأسبوعي لكن يفضل محفوظ.</DialogDescription>
+        </DialogHeader>
+
+        {rolesQuery.isLoading ? (
+          <p className="text-sm text-muted-foreground">بيتحمل...</p>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newRoleName}
+                onChange={(e) => setNewRoleName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleAddRole(); }}
+                placeholder="اسم دور جديد"
+                className="planner-input flex-1"
+                data-testid="input-new-role-name"
+              />
+              <Button onClick={handleAddRole} disabled={createRoleMutation.isPending} data-testid="button-add-role">
+                <Plus className="size-4" /> ضيف
+              </Button>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              {activeRoles.map((role) => (
+                <RoleRow
+                  key={role.id}
+                  role={role}
+                  expanded={expandedId === role.id}
+                  onToggleExpand={() => setExpandedId(expandedId === role.id ? null : role.id)}
+                  onUpdate={(patch) => updateRoleMutation.mutate({ roleId: role.id, data: patch })}
+                />
+              ))}
+            </div>
+
+            {inactiveRoles.length > 0 && (
+              <div>
+                <p className="mb-2 text-xs text-muted-foreground">أدوار معطّلة</p>
+                <div className="flex flex-col gap-2 opacity-60">
+                  {inactiveRoles.map((role) => (
+                    <RoleRow
+                      key={role.id}
+                      role={role}
+                      expanded={expandedId === role.id}
+                      onToggleExpand={() => setExpandedId(expandedId === role.id ? null : role.id)}
+                      onUpdate={(patch) => updateRoleMutation.mutate({ roleId: role.id, data: patch })}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {roles.length === 0 && (
+              <p className="text-center text-sm text-muted-foreground">لسه معندكش أي أدوار. ضيف أول دور فوق.</p>
+            )}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function RoleRow({
+  role,
+  expanded,
+  onToggleExpand,
+  onUpdate,
+}: {
+  role: LifeRole;
+  expanded: boolean;
+  onToggleExpand: () => void;
+  onUpdate: (patch: { name?: string; description?: string | null; direction?: string | null; isActive?: boolean }) => void;
+}) {
+  const [description, setDescription] = useState(role.description ?? '');
+  const [direction, setDirection] = useState(role.direction ?? '');
+
+  useEffect(() => {
+    setDescription(role.description ?? '');
+    setDirection(role.direction ?? '');
+  }, [role.description, role.direction]);
+
+  return (
+    <div className="planner-card" data-testid={`role-row-${role.id}`}>
+      <div className="flex items-center justify-between gap-2">
+        <button type="button" onClick={onToggleExpand} className="flex-1 text-right font-semibold" data-testid={`button-expand-role-${role.id}`}>
+          {role.name}
+        </button>
+        <button
+          type="button"
+          onClick={() => onUpdate({ isActive: !role.isActive })}
+          className="planner-button px-2 py-1 text-xs"
+          data-testid={`button-toggle-active-${role.id}`}
+        >
+          {role.isActive ? 'تعطيل' : 'تفعيل'}
+        </button>
+      </div>
+      {expanded && (
+        <div className="mt-3 flex flex-col gap-2">
+          <div>
+            <Label className="mb-1 block text-xs text-muted-foreground">وصف الدور</Label>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              onBlur={() => onUpdate({ description: description || null })}
+              rows={2}
+              placeholder="إيه طبيعة الدور ده في حياتك؟"
+              data-testid={`input-role-description-${role.id}`}
+            />
+          </div>
+          <div>
+            <Label className="mb-1 block text-xs text-muted-foreground">الاتجاه طويل المدى</Label>
+            <Textarea
+              value={direction}
+              onChange={(e) => setDirection(e.target.value)}
+              onBlur={() => onUpdate({ direction: direction || null })}
+              rows={2}
+              placeholder="إيه اللي عايز توصله في الدور ده على المدى الطويل؟"
+              data-testid={`input-role-direction-${role.id}`}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MissionDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const missionQuery = useGetMission({ query: { enabled: open, queryKey: getGetMissionQueryKey() } });
   const saveMissionMutation = useSaveMission();
@@ -597,7 +756,7 @@ function MissionDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o
   );
 }
 
-function PlannerHeader({ onReview, onMission }: { onReview: () => void; onMission: () => void }) {
+function PlannerHeader({ onReview, onMission, onRoles }: { onReview: () => void; onMission: () => void; onRoles: () => void }) {
   const { signOut } = useClerk();
   return (
     <div className="mb-6 flex items-start justify-between gap-3" data-testid="planner-header">
@@ -606,6 +765,7 @@ function PlannerHeader({ onReview, onMission }: { onReview: () => void; onMissio
         <p className="mt-1 text-sm text-muted-foreground" data-testid="text-planner-subtitle">الأدوار ← الأهداف ← الجدول ← التكيف اليومي</p>
       </div>
       <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
+        <button type="button" onClick={onRoles} className="planner-button whitespace-nowrap" data-testid="button-open-roles">الأدوار</button>
         <button type="button" onClick={onMission} className="planner-button whitespace-nowrap" data-testid="button-open-mission">رسالتي الشخصية</button>
         <button type="button" onClick={onReview} className="planner-button whitespace-nowrap" data-testid="button-open-review">مراجعة الأسبوع</button>
         <button type="button" onClick={() => void signOut({ redirectUrl: basePath || '/' })} className="planner-button inline-flex items-center gap-1.5 text-muted-foreground" data-testid="button-sign-out"><LogOut className="size-3.5" /><span className="hidden sm:inline">خروج</span></button>
