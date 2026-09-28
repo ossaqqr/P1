@@ -171,3 +171,61 @@ export const SaveMissionResponse = zod.object({
 })
 
 
+/**
+ * @summary List all of the user's roles (active and inactive)
+ */
+export const ListRolesResponseItem = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullable(),
+  "direction": zod.string().nullable(),
+  "isActive": zod.boolean(),
+  "sortOrder": zod.number()
+})
+export const ListRolesResponse = zod.array(ListRolesResponseItem)
+
+
+/**
+ * @summary Create a new role
+ */
+export const CreateRoleBody = zod.object({
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "direction": zod.string().nullish()
+})
+
+export const CreateRoleResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullable(),
+  "direction": zod.string().nullable(),
+  "isActive": zod.boolean(),
+  "sortOrder": zod.number()
+})
+
+
+/**
+ * @summary Update a role's fields (name, description, direction, active, order)
+ */
+export const UpdateRoleParams = zod.object({
+  "roleId": zod.coerce.string()
+})
+
+export const UpdateRoleBody = zod.object({
+  "name": zod.string().optional(),
+  "description": zod.string().nullish(),
+  "direction": zod.string().nullish(),
+  "isActive": zod.boolean().optional(),
+  "sortOrder": zod.number().optional()
+})
+
+export const UpdateRoleResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullable(),
+  "direction": zod.string().nullable(),
+  "isActive": zod.boolean(),
+  "sortOrder": zod.number()
+})
+
+
