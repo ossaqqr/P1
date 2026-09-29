@@ -16,6 +16,8 @@ tags:
     description: Personal mission and principles
   - name: roles
     description: Life roles management
+  - name: weeklyPlan
+    description: Weekly goals and tasks
 paths:
   /healthz:
     get:
@@ -181,6 +183,164 @@ paths:
           description: Unauthorized
         "404":
           description: Role not found
+  /weeks/{weekStartDate}/plan:
+    get:
+      operationId: getWeekPlan
+      tags: [weeklyPlan]
+      summary: Get all goals and tasks for one week (weekStartDate = YYYY-MM-DD, the Saturday that starts the week)
+      parameters:
+        - name: weekStartDate
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The week's goals and their tasks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeekPlan"
+        "400":
+          description: Invalid date
+        "401":
+          description: Unauthorized
+  /goals:
+    post:
+      operationId: createGoal
+      tags: [weeklyPlan]
+      summary: Create a weekly goal under a role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateGoalInput"
+      responses:
+        "200":
+          description: Created goal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeeklyGoal"
+        "400":
+          description: Invalid input
+        "401":
+          description: Unauthorized
+        "404":
+          description: Role not found
+  /goals/{goalId}:
+    patch:
+      operationId: updateGoal
+      tags: [weeklyPlan]
+      summary: Update a weekly goal
+      parameters:
+        - name: goalId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateGoalInput"
+      responses:
+        "200":
+          description: Updated goal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeeklyGoal"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Goal not found
+    delete:
+      operationId: deleteGoal
+      tags: [weeklyPlan]
+      summary: Delete a weekly goal together with its tasks
+      parameters:
+        - name: goalId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Unauthorized
+        "404":
+          description: Goal not found
+  /tasks:
+    post:
+      operationId: createTask
+      tags: [weeklyPlan]
+      summary: Create a task under a goal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTaskInput"
+      responses:
+        "200":
+          description: Created task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Goal not found
+  /tasks/{taskId}:
+    patch:
+      operationId: updateTask
+      tags: [weeklyPlan]
+      summary: Update a task
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTaskInput"
+      responses:
+        "200":
+          description: Updated task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Task not found
+    delete:
+      operationId: deleteTask
+      tags: [weeklyPlan]
+      summary: Delete a task
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Unauthorized
+        "404":
+          description: Task not found
 components:
   schemas:
     HealthStatus:
@@ -388,3 +548,91 @@ components:
         sortOrder:
           type: number
 
+    WeeklyGoal:
+      type: object
+      required: [id, roleId, weekStartDate, title, description, quadrant, status]
+      properties:
+        id:
+          type: string
+        roleId:
+          type: string
+        weekStartDate:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        quadrant:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [not_started, in_progress, done, partial]
+    Task:
+      type: object
+      required: [id, goalId, title, quadrant, isDone]
+      properties:
+        id:
+          type: string
+        goalId:
+          type: string
+          nullable: true
+        title:
+          type: string
+        quadrant:
+          type: string
+          nullable: true
+        isDone:
+          type: boolean
+    WeekPlan:
+      type: object
+      required: [goals, tasks]
+      properties:
+        goals:
+          type: array
+          items:
+            $ref: "#/components/schemas/WeeklyGoal"
+        tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Task"
+    CreateGoalInput:
+      type: object
+      required: [roleId, weekStartDate, title]
+      properties:
+        roleId:
+          type: string
+        weekStartDate:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+    UpdateGoalInput:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [not_started, in_progress, done, partial]
+    CreateTaskInput:
+      type: object
+      required: [goalId, title]
+      properties:
+        goalId:
+          type: string
+        title:
+          type: string
+    UpdateTaskInput:
+      type: object
+      properties:
+        title:
+          type: string
+        isDone:
+          type: boolean
