@@ -5,20 +5,29 @@ import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/reac
 import {
   getGetMissionQueryKey,
   getGetPlannerDataQueryKey,
+  getGetWeekPlanQueryKey,
   getListRolesQueryKey,
   setAuthTokenGetter,
   useAnalyzePlannerReview,
+  useCreateGoal,
   useCreateRole,
+  useCreateTask,
+  useDeleteGoal,
+  useDeleteTask,
   useGetMission,
   useGetPlannerData,
+  useGetWeekPlan,
   useListRoles,
   useSaveMission,
   useSavePlannerData,
+  useUpdateGoal,
   useUpdateRole,
+  useUpdateTask,
   type LifeRole,
   type PlannerData,
   type ReviewAnalysisEntry,
-  type Role,
+  type Task as PlanTask,
+  type WeeklyGoal,
 } from '@workspace/api-client-react';
 import { CalendarDays, Check, ChevronLeft, ClipboardList, LogOut, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { Redirect, Route, Router as WouterRouter, Switch, Link, useLocation } from 'wouter';
@@ -37,9 +46,9 @@ const queryClient = new QueryClient();
 const DAYS = ['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'] as const;
 type Day = (typeof DAYS)[number];
 type ReviewFormEntry = {
+  goalId: string;
   roleId: string;
   roleName: string;
-  goalField: string;
   goalText: string;
   statusVal: string;
   reason: string;
@@ -54,12 +63,10 @@ function stripBase(path: string) {
     : path;
 }
 
-const emptyRole = (): Role => ({ id: crypto.randomUUID(), name: '', goal1: '', goal2: '' });
-
 function defaultData(): PlannerData {
   return {
     weekEndDate: '',
-    roles: [emptyRole(), emptyRole(), emptyRole(), emptyRole()],
+    roles: [],
     schedule: Object.fromEntries(DAYS.map((day) => [day, ''])) as unknown as PlannerData['schedule'],
     reflection: '',
     review: null,
@@ -70,10 +77,20 @@ function normalizeData(value?: PlannerData | null): PlannerData {
   if (!value) return defaultData();
   return {
     ...value,
-    roles: value.roles?.length ? value.roles : [emptyRole()],
+    roles: value.roles ?? [],
     schedule: Object.fromEntries(DAYS.map((day) => [day, value.schedule?.[day] ?? ''])) as unknown as PlannerData['schedule'],
     review: value.review ?? null,
   };
+}
+
+/** The Saturday that starts the week containing/ending on `weekEndDate`. */
+function computeWeekStartDate(weekEndDate: string): string {
+  if (!weekEndDate) return '';
+  const end = new Date(`${weekEndDate}T00:00:00`);
+  if (Number.isNaN(end.getTime())) return '';
+  const start = new Date(end);
+  start.setDate(start.getDate() - 6);
+  return `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`;
 }
 
 function todayStr() {
@@ -230,6 +247,24 @@ function PlannerPage() {
   const [rolesOpen, setRolesOpen] = useState(false);
   const saveQueueRef = useRef(Promise.resolve());
 
+  const rolesQuery = useListRoles({ query: { queryKey: getListRolesQueryKey() } });
+  const activeRoles = useMemo(() => (rolesQuery.data ?? []).filter((role) => role.isActive), [rolesQuery.data]);
+
+  const weekStartDate = useMemo(() => computeWeekStartDate(data.weekEndDate), [data.weekEndDate]);
+  const weekPlanQuery = useGetWeekPlan(weekStartDate, {
+    query: { enabled: Boolean(weekStartDate), queryKey: getGetWeekPlanQueryKey(weekStartDate) },
+  });
+  const invalidateWeekPlan = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: getGetWeekPlanQueryKey(weekStartDate) }),
+    [queryClient, weekStartDate],
+  );
+  const createGoalMutation = useCreateGoal({ mutation: { onSuccess: () => void invalidateWeekPlan() } });
+  const updateGoalMutation = useUpdateGoal({ mutation: { onSuccess: () => void invalidateWeekPlan() } });
+  const deleteGoalMutation = useDeleteGoal({ mutation: { onSuccess: () => void invalidateWeekPlan() } });
+  const createTaskMutation = useCreateTask({ mutation: { onSuccess: () => void invalidateWeekPlan() } });
+  const updateTaskMutation = useUpdateTask({ mutation: { onSuccess: () => void invalidateWeekPlan() } });
+  const deleteTaskMutation = useDeleteTask({ mutation: { onSuccess: () => void invalidateWeekPlan() } });
+
   useEffect(() => {
     initializedForUser.current = null;
     setData(defaultData());
@@ -267,19 +302,6 @@ function PlannerPage() {
     setIsDatePickerOpen(false);
   };
 
-  const updateRole = (id: string, field: keyof Role, value: string) => {
-    void save({ ...data, roles: data.roles.map((role) => role.id === id ? { ...role, [field]: value } : role) });
-  };
-
-  const addRole = () => {
-    if (data.roles.length >= 7) return;
-    void save({ ...data, roles: [...data.roles, emptyRole()] });
-  };
-
-  const removeRole = (id: string) => {
-    void save({ ...data, roles: data.roles.filter((role) => role.id !== id) });
-  };
-
   const updateSchedule = (day: Day, value: string) => {
     void save({ ...data, schedule: { ...data.schedule, [day]: value } });
   };
@@ -292,14 +314,16 @@ function PlannerPage() {
   };
 
   const goalList = useMemo(() => {
-    const list: Array<{ roleId: string; roleName: string; goalField: string; goalText: string }> = [];
-    data.roles.forEach((role) => {
-      if (!role.name.trim()) return;
-      if (role.goal1.trim()) list.push({ roleId: role.id, roleName: role.name, goalField: 'goal1', goalText: role.goal1 });
-      if (role.goal2.trim()) list.push({ roleId: role.id, roleName: role.name, goalField: 'goal2', goalText: role.goal2 });
-    });
-    return list;
-  }, [data.roles]);
+    const roleNameById = new Map(activeRoles.map((role) => [role.id, role.name]));
+    return (weekPlanQuery.data?.goals ?? [])
+      .filter((goal) => roleNameById.has(goal.roleId))
+      .map((goal) => ({
+        goalId: goal.id,
+        roleId: goal.roleId,
+        roleName: roleNameById.get(goal.roleId) ?? '',
+        goalText: goal.title,
+      }));
+  }, [weekPlanQuery.data, activeRoles]);
 
   const openReviewIntro = () => setScreen('reviewIntro');
   const startReview = () => {
@@ -311,6 +335,8 @@ function PlannerPage() {
   const updateEntry = (index: number, field: 'statusVal' | 'reason', value: string) => {
     setReviewEntries((previous) => previous.map((entry, entryIndex) => entryIndex === index ? { ...entry, [field]: value } : entry));
   };
+
+  const STATUS_MAP: Record<string, 'done' | 'partial' | 'not_started'> = { 'تم': 'done', 'جزئيًا': 'partial', 'لأ': 'not_started' };
 
   const submitReview = async () => {
     if (reviewEntries.some((entry) => !entry.statusVal)) {
@@ -327,10 +353,20 @@ function PlannerPage() {
       }));
       const result = await analyzeMutation.mutateAsync({ data: { entries } });
       const combinedEntries = reviewEntries.map((entry, index) => ({
-        ...entry,
+        roleId: entry.roleId,
+        roleName: entry.roleName,
+        goalField: entry.goalId,
+        goalText: entry.goalText,
+        statusVal: entry.statusVal,
+        reason: entry.reason,
         advice: result.items[index].advice,
         concept: result.items[index].concept,
       }));
+      await Promise.all(
+        reviewEntries.map((entry) =>
+          updateGoalMutation.mutateAsync({ goalId: entry.goalId, data: { status: STATUS_MAP[entry.statusVal] ?? 'not_started' } }),
+        ),
+      );
       const nextData: PlannerData = {
         ...data,
         review: {
@@ -347,8 +383,7 @@ function PlannerPage() {
   };
 
   const startNewWeekFromReview = () => {
-    const carriedRoles = data.roles.map((role) => ({ ...role, id: crypto.randomUUID(), goal1: '', goal2: '' }));
-    void save({ ...defaultData(), roles: carriedRoles.length ? carriedRoles : [emptyRole()] });
+    void save({ ...defaultData() });
     setScreen('plan');
   };
 
@@ -383,7 +418,7 @@ function PlannerPage() {
           <p className="mb-4 text-[13px] text-muted-foreground">لكل هدف، حدد وصلت فين، ولو مكنش تم، تقدر (مش لازم) تقول ليه باختصار.</p>
           <div className="flex flex-col gap-3">
             {reviewEntries.map((entry, index) => (
-              <div key={`${entry.roleId}-${entry.goalField}`} className="planner-card" data-testid={`card-review-entry-${index}`}>
+              <div key={`${entry.roleId}-${entry.goalId}`} className="planner-card" data-testid={`card-review-entry-${index}`}>
                 <p className="mb-0.5 text-[13px] text-muted-foreground">{entry.roleName}</p>
                 <p className="mb-2.5 text-[15px] font-semibold">{entry.goalText}</p>
                 <div className="mb-2 flex gap-2">
@@ -490,22 +525,36 @@ function PlannerPage() {
 
         <section className="mb-8" data-testid="section-roles">
           <h2 className="mb-1 text-[17px] font-bold">١. الأدوار وأهداف الأسبوع</h2>
-          <p className="mb-3 text-[13px] text-muted-foreground">اكتب أهم أدوارك في حياتك وحط هدف أو اتنين لكل دور لِلأسبوع ده.</p>
-          <div className="flex flex-col gap-2.5">
-            {data.roles.map((role) => (
-              <div key={role.id} className="planner-card" data-testid={`card-role-${role.id}`}>
-                <div className="mb-2 flex items-center gap-2">
-                  <input type="text" value={role.name} onChange={(event) => updateRole(role.id, 'name', event.target.value)} placeholder="اسم الدور (مثلاً: الأب، الطالب، الموظف)" className="planner-input flex-1 font-semibold" data-testid={`input-role-name-${role.id}`} />
-                  <button type="button" onClick={() => removeRole(role.id)} aria-label="حذف الدور" className="planner-button planner-button-danger px-2.5 py-1.5" data-testid={`button-delete-role-${role.id}`}><Trash2 className="size-3.5 sm:hidden" /><span className="hidden sm:inline">حذف</span></button>
-                </div>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <input type="text" value={role.goal1} onChange={(event) => updateRole(role.id, 'goal1', event.target.value)} placeholder="هدف ١ لهذا الأسبوع" className="planner-input" data-testid={`input-role-goal1-${role.id}`} />
-                  <input type="text" value={role.goal2} onChange={(event) => updateRole(role.id, 'goal2', event.target.value)} placeholder="هدف ٢ (اختياري)" className="planner-input" data-testid={`input-role-goal2-${role.id}`} />
-                </div>
-              </div>
-            ))}
-          </div>
-          {data.roles.length < 7 && <button type="button" onClick={addRole} className="planner-button mt-2.5 inline-flex items-center gap-1.5" data-testid="button-add-role"><Plus className="size-4" />ضيف دور</button>}
+          <p className="mb-3 text-[13px] text-muted-foreground">الأهداف هنا مرتبطة بأدوارك المُدارة — لو عايز تضيف دور جديد، افتح "الأدوار" فوق.</p>
+
+          {rolesQuery.isLoading ? (
+            <p className="text-sm text-muted-foreground">بيتحمل...</p>
+          ) : activeRoles.length === 0 ? (
+            <div className="planner-card text-center" data-testid="empty-state-no-roles">
+              <p className="mb-2.5 text-sm text-muted-foreground">لسه معندكش أي دور مفعّل.</p>
+              <button type="button" onClick={() => setRolesOpen(true)} className="planner-button planner-button-primary" data-testid="button-add-first-role">افتح الأدوار وضيف واحد</button>
+            </div>
+          ) : !weekStartDate ? (
+            <p className="text-sm text-muted-foreground" data-testid="empty-state-no-week">حدد تاريخ نهاية الأسبوع فوق الأول عشان تقدر تحط أهدافك.</p>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {activeRoles.map((role) => (
+                <RoleGoalsCard
+                  key={role.id}
+                  role={role}
+                  weekStartDate={weekStartDate}
+                  goals={(weekPlanQuery.data?.goals ?? []).filter((g) => g.roleId === role.id)}
+                  tasks={weekPlanQuery.data?.tasks ?? []}
+                  onCreateGoal={(title) => createGoalMutation.mutate({ data: { roleId: role.id, weekStartDate, title } })}
+                  onUpdateGoal={(goalId, title) => updateGoalMutation.mutate({ goalId, data: { title } })}
+                  onDeleteGoal={(goalId) => deleteGoalMutation.mutate({ goalId })}
+                  onCreateTask={(goalId, title) => createTaskMutation.mutate({ data: { goalId, title } })}
+                  onToggleTask={(taskId, isDone) => updateTaskMutation.mutate({ taskId, data: { isDone } })}
+                  onDeleteTask={(taskId) => deleteTaskMutation.mutate({ taskId })}
+                />
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="mb-8" data-testid="section-schedule">
@@ -532,6 +581,154 @@ function PlannerPage() {
           <button type="button" onClick={resetAll} className="planner-button planner-button-danger inline-flex items-center gap-1.5" data-testid="button-reset-all"><RotateCcw className="size-3.5" />أسبوع جديد (مسح الكل)</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function RoleGoalsCard({
+  role,
+  weekStartDate,
+  goals,
+  tasks,
+  onCreateGoal,
+  onUpdateGoal,
+  onDeleteGoal,
+  onCreateTask,
+  onToggleTask,
+  onDeleteTask,
+}: {
+  role: LifeRole;
+  weekStartDate: string;
+  goals: WeeklyGoal[];
+  tasks: PlanTask[];
+  onCreateGoal: (title: string) => void;
+  onUpdateGoal: (goalId: string, title: string) => void;
+  onDeleteGoal: (goalId: string) => void;
+  onCreateTask: (goalId: string, title: string) => void;
+  onToggleTask: (taskId: string, isDone: boolean) => void;
+  onDeleteTask: (taskId: string) => void;
+}) {
+  const [newGoalTitle, setNewGoalTitle] = useState('');
+  const handleAdd = () => {
+    if (!newGoalTitle.trim()) return;
+    onCreateGoal(newGoalTitle.trim());
+    setNewGoalTitle('');
+  };
+
+  return (
+    <div className="planner-card" data-testid={`role-goals-card-${role.id}`}>
+      <p className="mb-0.5 font-semibold" data-testid={`text-role-name-${role.id}`}>{role.name}</p>
+      {role.description && <p className="mb-2 text-xs text-muted-foreground">{role.description}</p>}
+      <div className="flex flex-col gap-2">
+        {goals.map((goal) => (
+          <GoalRow
+            key={goal.id}
+            goal={goal}
+            tasks={tasks.filter((task) => task.goalId === goal.id)}
+            onUpdate={(title) => onUpdateGoal(goal.id, title)}
+            onDelete={() => onDeleteGoal(goal.id)}
+            onCreateTask={(title) => onCreateTask(goal.id, title)}
+            onToggleTask={onToggleTask}
+            onDeleteTask={onDeleteTask}
+          />
+        ))}
+      </div>
+      <div className="mt-2.5 flex gap-2" data-testid={`new-goal-row-${weekStartDate}-${role.id}`}>
+        <input
+          type="text"
+          value={newGoalTitle}
+          onChange={(event) => setNewGoalTitle(event.target.value)}
+          onKeyDown={(event) => { if (event.key === 'Enter') handleAdd(); }}
+          placeholder="هدف جديد لهذا الدور"
+          className="planner-input flex-1"
+          data-testid={`input-new-goal-${role.id}`}
+        />
+        <button type="button" onClick={handleAdd} className="planner-button" aria-label="ضيف هدف" data-testid={`button-add-goal-${role.id}`}>
+          <Plus className="size-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function GoalRow({
+  goal,
+  tasks,
+  onUpdate,
+  onDelete,
+  onCreateTask,
+  onToggleTask,
+  onDeleteTask,
+}: {
+  goal: WeeklyGoal;
+  tasks: PlanTask[];
+  onUpdate: (title: string) => void;
+  onDelete: () => void;
+  onCreateTask: (title: string) => void;
+  onToggleTask: (taskId: string, isDone: boolean) => void;
+  onDeleteTask: (taskId: string) => void;
+}) {
+  const [title, setTitle] = useState(goal.title);
+  const [expanded, setExpanded] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+
+  useEffect(() => setTitle(goal.title), [goal.title]);
+
+  const statusLabel = goal.status === 'done' ? 'تم' : goal.status === 'partial' ? 'جزئيًا' : '';
+  const statusColor = goal.status === 'done' ? 'text-[#27500a]' : goal.status === 'partial' ? 'text-[#633806]' : 'text-muted-foreground';
+
+  const handleAddTask = () => {
+    if (!newTaskTitle.trim()) return;
+    onCreateTask(newTaskTitle.trim());
+    setNewTaskTitle('');
+  };
+
+  return (
+    <div className="rounded-lg border border-border/60 p-2.5" data-testid={`goal-row-${goal.id}`}>
+      <div className="flex items-center gap-2">
+        <button type="button" onClick={() => setExpanded((value) => !value)} aria-label="المهام" className="shrink-0 text-muted-foreground" data-testid={`button-expand-goal-${goal.id}`}>
+          <ChevronLeft className={`size-4 transition-transform ${expanded ? '-rotate-90' : ''}`} />
+        </button>
+        <input
+          type="text"
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          onBlur={() => { if (title.trim() && title.trim() !== goal.title) onUpdate(title.trim()); }}
+          className="planner-input flex-1 text-sm"
+          data-testid={`input-goal-title-${goal.id}`}
+        />
+        {statusLabel && <span className={`shrink-0 text-[11px] font-semibold ${statusColor}`} data-testid={`status-goal-${goal.id}`}>{statusLabel}</span>}
+        <button type="button" onClick={onDelete} aria-label="حذف الهدف" className="shrink-0 text-destructive" data-testid={`button-delete-goal-${goal.id}`}>
+          <Trash2 className="size-3.5" />
+        </button>
+      </div>
+      {expanded && (
+        <div className="mr-6 mt-2 flex flex-col gap-1.5" data-testid={`tasks-list-${goal.id}`}>
+          {tasks.map((task) => (
+            <div key={task.id} className="flex items-center gap-2" data-testid={`task-row-${task.id}`}>
+              <input type="checkbox" checked={task.isDone} onChange={(event) => onToggleTask(task.id, event.target.checked)} data-testid={`checkbox-task-${task.id}`} />
+              <span className={`flex-1 text-sm ${task.isDone ? 'text-muted-foreground line-through' : ''}`} data-testid={`text-task-title-${task.id}`}>{task.title}</span>
+              <button type="button" onClick={() => onDeleteTask(task.id)} aria-label="حذف المهمة" className="text-destructive" data-testid={`button-delete-task-${task.id}`}>
+                <Trash2 className="size-3" />
+              </button>
+            </div>
+          ))}
+          <div className="flex gap-1.5">
+            <input
+              type="text"
+              value={newTaskTitle}
+              onChange={(event) => setNewTaskTitle(event.target.value)}
+              onKeyDown={(event) => { if (event.key === 'Enter') handleAddTask(); }}
+              placeholder="مهمة جديدة"
+              className="planner-input flex-1 text-xs"
+              data-testid={`input-new-task-${goal.id}`}
+            />
+            <button type="button" onClick={handleAddTask} className="planner-button px-2 py-1 text-xs" aria-label="ضيف مهمة" data-testid={`button-add-task-${goal.id}`}>
+              <Plus className="size-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
