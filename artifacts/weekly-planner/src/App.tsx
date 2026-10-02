@@ -6,25 +6,31 @@ import {
   getGetMissionQueryKey,
   getGetPlannerDataQueryKey,
   getGetWeekPlanQueryKey,
+  getListPrinciplesQueryKey,
   getListRolesQueryKey,
   setAuthTokenGetter,
   useAnalyzePlannerReview,
   useCreateGoal,
+  useCreatePrinciple,
   useCreateRole,
   useCreateTask,
   useDeleteGoal,
+  useDeletePrinciple,
   useDeleteTask,
   useGetMission,
   useGetPlannerData,
   useGetWeekPlan,
+  useListPrinciples,
   useListRoles,
   useSaveMission,
   useSavePlannerData,
   useUpdateGoal,
+  useUpdatePrinciple,
   useUpdateRole,
   useUpdateTask,
   type LifeRole,
   type PlannerData,
+  type Principle,
   type ReviewAnalysisEntry,
   type Task as PlanTask,
   type WeeklyGoal,
@@ -36,7 +42,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -244,7 +250,6 @@ function PlannerPage() {
   const initializedForUser = useRef<string | null>(null);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [missionOpen, setMissionOpen] = useState(false);
-  const [rolesOpen, setRolesOpen] = useState(false);
   const saveQueueRef = useRef(Promise.resolve());
 
   const rolesQuery = useListRoles({ query: { queryKey: getListRolesQueryKey() } });
@@ -481,9 +486,8 @@ function PlannerPage() {
   return (
     <div className="planner-shell" dir="rtl" data-testid="planner-page">
       <div className="planner-wrap">
-        <PlannerHeader onReview={openReviewIntro} onMission={() => setMissionOpen(true)} onRoles={() => setRolesOpen(true)} />
-        <MissionDialog open={missionOpen} onOpenChange={setMissionOpen} />
-        <RolesDialog open={rolesOpen} onOpenChange={setRolesOpen} />
+        <PlannerHeader onReview={openReviewIntro} onMission={() => setMissionOpen(true)} />
+        <MissionDialog open={missionOpen} onOpenChange={setMissionOpen} weekStartDate={weekStartDate} />
         {data.review && (
           <div className="planner-card mb-4 flex items-center justify-between gap-3 border-[#c0dd97] bg-[#eaf3de]" data-testid="status-review-complete">
             <span className="text-[13px] text-[#27500a]">الأسبوع ده اتراجع بالفعل</span>
@@ -532,7 +536,7 @@ function PlannerPage() {
           ) : activeRoles.length === 0 ? (
             <div className="planner-card text-center" data-testid="empty-state-no-roles">
               <p className="mb-2.5 text-sm text-muted-foreground">لسه معندكش أي دور مفعّل.</p>
-              <button type="button" onClick={() => setRolesOpen(true)} className="planner-button planner-button-primary" data-testid="button-add-first-role">افتح الأدوار وضيف واحد</button>
+              <button type="button" onClick={() => setMissionOpen(true)} className="planner-button planner-button-primary" data-testid="button-add-first-role">افتح رسالتي الشخصية وضيف دور</button>
             </div>
           ) : !weekStartDate ? (
             <p className="text-sm text-muted-foreground" data-testid="empty-state-no-week">حدد تاريخ نهاية الأسبوع فوق الأول عشان تقدر تحط أهدافك.</p>
@@ -733,94 +737,6 @@ function GoalRow({
   );
 }
 
-function RolesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  const rolesQuery = useListRoles({ query: { enabled: open, queryKey: getListRolesQueryKey() } });
-  const queryClient = useQueryClient();
-  const createRoleMutation = useCreateRole({
-    mutation: { onSuccess: () => void queryClient.invalidateQueries({ queryKey: getListRolesQueryKey() }) },
-  });
-  const updateRoleMutation = useUpdateRole({
-    mutation: { onSuccess: () => void queryClient.invalidateQueries({ queryKey: getListRolesQueryKey() }) },
-  });
-  const [newRoleName, setNewRoleName] = useState('');
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-
-  const roles = rolesQuery.data ?? [];
-  const activeRoles = roles.filter((r) => r.isActive);
-  const inactiveRoles = roles.filter((r) => !r.isActive);
-
-  const handleAddRole = () => {
-    if (!newRoleName.trim()) return;
-    createRoleMutation.mutate({ data: { name: newRoleName.trim() } });
-    setNewRoleName('');
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent dir="rtl" className="max-h-[85vh] max-w-lg overflow-y-auto" data-testid="dialog-roles">
-        <DialogHeader>
-          <DialogTitle>الأدوار</DialogTitle>
-          <DialogDescription>أدوارك في حياتك — دور معطّل بيختفي من التخطيط الأسبوعي لكن يفضل محفوظ.</DialogDescription>
-        </DialogHeader>
-
-        {rolesQuery.isLoading ? (
-          <p className="text-sm text-muted-foreground">بيتحمل...</p>
-        ) : (
-          <div className="flex flex-col gap-4">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={newRoleName}
-                onChange={(e) => setNewRoleName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleAddRole(); }}
-                placeholder="اسم دور جديد"
-                className="planner-input flex-1"
-                data-testid="input-new-role-name"
-              />
-              <Button onClick={handleAddRole} disabled={createRoleMutation.isPending} data-testid="button-add-role">
-                <Plus className="size-4" /> ضيف
-              </Button>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              {activeRoles.map((role) => (
-                <RoleRow
-                  key={role.id}
-                  role={role}
-                  expanded={expandedId === role.id}
-                  onToggleExpand={() => setExpandedId(expandedId === role.id ? null : role.id)}
-                  onUpdate={(patch) => updateRoleMutation.mutate({ roleId: role.id, data: patch })}
-                />
-              ))}
-            </div>
-
-            {inactiveRoles.length > 0 && (
-              <div>
-                <p className="mb-2 text-xs text-muted-foreground">أدوار معطّلة</p>
-                <div className="flex flex-col gap-2 opacity-60">
-                  {inactiveRoles.map((role) => (
-                    <RoleRow
-                      key={role.id}
-                      role={role}
-                      expanded={expandedId === role.id}
-                      onToggleExpand={() => setExpandedId(expandedId === role.id ? null : role.id)}
-                      onUpdate={(patch) => updateRoleMutation.mutate({ roleId: role.id, data: patch })}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {roles.length === 0 && (
-              <p className="text-center text-sm text-muted-foreground">لسه معندكش أي أدوار. ضيف أول دور فوق.</p>
-            )}
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 function RoleRow({
   role,
   expanded,
@@ -841,7 +757,7 @@ function RoleRow({
   }, [role.description, role.direction]);
 
   return (
-    <div className="planner-card" data-testid={`role-row-${role.id}`}>
+    <div data-testid={`role-row-${role.id}`}>
       <div className="flex items-center justify-between gap-2">
         <button type="button" onClick={onToggleExpand} className="flex-1 text-right font-semibold" data-testid={`button-expand-role-${role.id}`}>
           {role.name}
@@ -885,75 +801,247 @@ function RoleRow({
   );
 }
 
-function MissionDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+function PrincipleRow({ principle, onUpdate, onDelete }: { principle: Principle; onUpdate: (text: string) => void; onDelete: () => void }) {
+  const [text, setText] = useState(principle.text);
+  useEffect(() => setText(principle.text), [principle.text]);
+  return (
+    <div className="flex items-center gap-2" data-testid={`principle-row-${principle.id}`}>
+      <input
+        type="text"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={() => { if (text.trim() && text.trim() !== principle.text) onUpdate(text.trim()); }}
+        className="planner-input flex-1 text-sm"
+        data-testid={`input-principle-${principle.id}`}
+      />
+      <button type="button" onClick={onDelete} aria-label="حذف المبدأ" className="shrink-0 text-destructive" data-testid={`button-delete-principle-${principle.id}`}>
+        <Trash2 className="size-3.5" />
+      </button>
+    </div>
+  );
+}
+
+function MissionDialog({ open, onOpenChange, weekStartDate }: { open: boolean; onOpenChange: (open: boolean) => void; weekStartDate: string }) {
+  const queryClient = useQueryClient();
+
+  // --- Personal Vision (stored as mission.missionStatement) ---
   const missionQuery = useGetMission({ query: { enabled: open, queryKey: getGetMissionQueryKey() } });
   const saveMissionMutation = useSaveMission();
-  const [missionStatement, setMissionStatement] = useState('');
-  const [principles, setPrinciples] = useState('');
-  const [saved, setSaved] = useState(false);
+  const [personalVision, setPersonalVision] = useState('');
+  const [visionSaved, setVisionSaved] = useState(false);
 
   useEffect(() => {
-    if (missionQuery.data) {
-      setMissionStatement(missionQuery.data.missionStatement);
-      setPrinciples(missionQuery.data.principles);
-    }
+    if (missionQuery.data) setPersonalVision(missionQuery.data.missionStatement);
   }, [missionQuery.data]);
 
-  const handleSave = () => {
-    setSaved(false);
+  const handleSaveVision = () => {
+    setVisionSaved(false);
     saveMissionMutation.mutate(
-      { data: { missionStatement, principles } },
-      { onSuccess: () => { setSaved(true); setTimeout(() => setSaved(false), 1500); } },
+      { data: { missionStatement: personalVision, principles: '' } },
+      { onSuccess: () => { setVisionSaved(true); setTimeout(() => setVisionSaved(false), 1500); } },
     );
   };
 
+  // --- Principles (individual items) ---
+  const principlesQuery = useListPrinciples({ query: { enabled: open, queryKey: getListPrinciplesQueryKey() } });
+  const invalidatePrinciples = () => void queryClient.invalidateQueries({ queryKey: getListPrinciplesQueryKey() });
+  const createPrincipleMutation = useCreatePrinciple({ mutation: { onSuccess: invalidatePrinciples } });
+  const updatePrincipleMutation = useUpdatePrinciple({ mutation: { onSuccess: invalidatePrinciples } });
+  const deletePrincipleMutation = useDeletePrinciple({ mutation: { onSuccess: invalidatePrinciples } });
+  const [newPrincipleText, setNewPrincipleText] = useState('');
+
+  const handleAddPrinciple = () => {
+    if (!newPrincipleText.trim()) return;
+    createPrincipleMutation.mutate({ data: { text: newPrincipleText.trim() } });
+    setNewPrincipleText('');
+  };
+
+  // --- Roles (single source of truth, reused as-is) ---
+  const rolesQuery = useListRoles({ query: { enabled: open, queryKey: getListRolesQueryKey() } });
+  const invalidateRoles = () => void queryClient.invalidateQueries({ queryKey: getListRolesQueryKey() });
+  const createRoleMutation = useCreateRole({ mutation: { onSuccess: invalidateRoles } });
+  const updateRoleMutation = useUpdateRole({ mutation: { onSuccess: invalidateRoles } });
+  const [newRoleName, setNewRoleName] = useState('');
+  const [expandedRoleId, setExpandedRoleId] = useState<string | null>(null);
+
+  const roles = rolesQuery.data ?? [];
+  const activeRoles = roles.filter((r) => r.isActive);
+  const inactiveRoles = roles.filter((r) => !r.isActive);
+
+  const handleAddRole = () => {
+    if (!newRoleName.trim()) return;
+    createRoleMutation.mutate({ data: { name: newRoleName.trim() } });
+    setNewRoleName('');
+  };
+
+  // --- Goals & Tasks for the current week, under each role (same data/API as the main page) ---
+  const weekPlanQuery = useGetWeekPlan(weekStartDate, {
+    query: { enabled: open && Boolean(weekStartDate), queryKey: getGetWeekPlanQueryKey(weekStartDate) },
+  });
+  const invalidateWeekPlan = () => void queryClient.invalidateQueries({ queryKey: getGetWeekPlanQueryKey(weekStartDate) });
+  const createGoalMutation = useCreateGoal({ mutation: { onSuccess: invalidateWeekPlan } });
+  const updateGoalMutation = useUpdateGoal({ mutation: { onSuccess: invalidateWeekPlan } });
+  const deleteGoalMutation = useDeleteGoal({ mutation: { onSuccess: invalidateWeekPlan } });
+  const createTaskMutation = useCreateTask({ mutation: { onSuccess: invalidateWeekPlan } });
+  const updateTaskMutation = useUpdateTask({ mutation: { onSuccess: invalidateWeekPlan } });
+  const deleteTaskMutation = useDeleteTask({ mutation: { onSuccess: invalidateWeekPlan } });
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent dir="rtl" className="max-h-[85vh] overflow-y-auto" data-testid="dialog-mission">
+      <DialogContent dir="rtl" className="max-h-[85vh] max-w-xl overflow-y-auto" data-testid="dialog-mission">
         <DialogHeader>
           <DialogTitle>رسالتي الشخصية</DialogTitle>
-          <DialogDescription>القيم والاتجاه اللي بتحدد أولوياتك — ارجع لها كل ما تخطط أسبوعك.</DialogDescription>
+          <DialogDescription>مبادئك، رؤيتك، وأدوارك وأهدافك — كل حاجة بتحدد أولوياتك في مكان واحد.</DialogDescription>
         </DialogHeader>
-        {missionQuery.isLoading ? (
-          <p className="text-sm text-muted-foreground">بيتحمل...</p>
-        ) : (
-          <div className="flex flex-col gap-4">
-            <div>
-              <Label htmlFor="mission-statement" className="mb-1.5 block text-xs text-muted-foreground">رسالة حياتك</Label>
-              <Textarea
-                id="mission-statement"
-                value={missionStatement}
-                onChange={(e) => setMissionStatement(e.target.value)}
-                placeholder="إيه أهم حاجة عايز حياتك تقوم عليها؟"
-                rows={4}
-                data-testid="input-mission-statement"
-              />
+
+        <div className="flex flex-col gap-6">
+          <section data-testid="section-principles">
+            <h3 className="mb-2 text-sm font-bold">المبادئ والقيم</h3>
+            <div className="flex flex-col gap-1.5">
+              {(principlesQuery.data ?? []).map((principle) => (
+                <PrincipleRow
+                  key={principle.id}
+                  principle={principle}
+                  onUpdate={(text) => updatePrincipleMutation.mutate({ principleId: principle.id, data: { text } })}
+                  onDelete={() => deletePrincipleMutation.mutate({ principleId: principle.id })}
+                />
+              ))}
             </div>
-            <div>
-              <Label htmlFor="mission-principles" className="mb-1.5 block text-xs text-muted-foreground">مبادئك وقيمك</Label>
-              <Textarea
-                id="mission-principles"
-                value={principles}
-                onChange={(e) => setPrinciples(e.target.value)}
-                placeholder="القيم اللي بتحكم قراراتك..."
-                rows={4}
-                data-testid="input-mission-principles"
+            <div className="mt-2 flex gap-2">
+              <input
+                type="text"
+                value={newPrincipleText}
+                onChange={(e) => setNewPrincipleText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleAddPrinciple(); }}
+                placeholder="مبدأ جديد (مثلاً: الالتزام)"
+                className="planner-input flex-1"
+                data-testid="input-new-principle"
               />
+              <Button onClick={handleAddPrinciple} disabled={createPrincipleMutation.isPending} data-testid="button-add-principle">
+                <Plus className="size-4" /> ضيف
+              </Button>
             </div>
-          </div>
-        )}
-        <DialogFooter className="mt-2 flex-row items-center justify-between sm:justify-between">
-          <span className="text-xs text-muted-foreground">{saved ? 'اتحفظ' : ''}</span>
-          <Button onClick={handleSave} disabled={saveMissionMutation.isPending} data-testid="button-save-mission">
-            {saveMissionMutation.isPending ? 'بيتحفظ...' : 'حفظ'}
-          </Button>
-        </DialogFooter>
+          </section>
+
+          <section data-testid="section-vision">
+            <h3 className="mb-2 text-sm font-bold">رؤيتي الشخصية</h3>
+            <Textarea
+              value={personalVision}
+              onChange={(e) => setPersonalVision(e.target.value)}
+              onBlur={handleSaveVision}
+              placeholder="أي نوع من الناس عايز أبقى؟ حياتي رايحة على فين؟"
+              rows={3}
+              data-testid="input-personal-vision"
+            />
+            {visionSaved && <p className="mt-1 text-xs text-muted-foreground">اتحفظ</p>}
+          </section>
+
+          <section data-testid="section-roles-goals">
+            <h3 className="mb-1 text-sm font-bold">الأدوار والأهداف</h3>
+            <p className="mb-2 text-xs text-muted-foreground">نفس الأدوار والأهداف اللي شايفها في الصفحة الرئيسية — مصدر واحد للبيانات.</p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newRoleName}
+                onChange={(e) => setNewRoleName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleAddRole(); }}
+                placeholder="اسم دور جديد"
+                className="planner-input flex-1"
+                data-testid="input-new-role-name"
+              />
+              <Button onClick={handleAddRole} disabled={createRoleMutation.isPending} data-testid="button-add-role">
+                <Plus className="size-4" /> ضيف
+              </Button>
+            </div>
+
+            <div className="mt-3 flex flex-col gap-3">
+              {activeRoles.map((role) => (
+                <div key={role.id} className="planner-card" data-testid={`role-section-${role.id}`}>
+                  <RoleRow
+                    role={role}
+                    expanded={expandedRoleId === role.id}
+                    onToggleExpand={() => setExpandedRoleId(expandedRoleId === role.id ? null : role.id)}
+                    onUpdate={(patch) => updateRoleMutation.mutate({ roleId: role.id, data: patch })}
+                  />
+                  <div className="mt-3 border-t border-border/60 pt-3">
+                    {weekStartDate ? (
+                      <div className="flex flex-col gap-2">
+                        {(weekPlanQuery.data?.goals ?? []).filter((g) => g.roleId === role.id).map((goal) => (
+                          <GoalRow
+                            key={goal.id}
+                            goal={goal}
+                            tasks={(weekPlanQuery.data?.tasks ?? []).filter((task) => task.goalId === goal.id)}
+                            onUpdate={(title) => updateGoalMutation.mutate({ goalId: goal.id, data: { title } })}
+                            onDelete={() => deleteGoalMutation.mutate({ goalId: goal.id })}
+                            onCreateTask={(title) => createTaskMutation.mutate({ data: { goalId: goal.id, title } })}
+                            onToggleTask={(taskId, isDone) => updateTaskMutation.mutate({ taskId, data: { isDone } })}
+                            onDeleteTask={(taskId) => deleteTaskMutation.mutate({ taskId })}
+                          />
+                        ))}
+                        <AddGoalInline onAdd={(title) => createGoalMutation.mutate({ data: { roleId: role.id, weekStartDate, title } })} />
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">حدد تاريخ نهاية الأسبوع في الصفحة الرئيسية الأول عشان تقدر تضيف أهداف.</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {inactiveRoles.length > 0 && (
+              <div className="mt-3">
+                <p className="mb-2 text-xs text-muted-foreground">أدوار معطّلة</p>
+                <div className="flex flex-col gap-2 opacity-60">
+                  {inactiveRoles.map((role) => (
+                    <div key={role.id} className="planner-card">
+                      <RoleRow
+                        role={role}
+                        expanded={expandedRoleId === role.id}
+                        onToggleExpand={() => setExpandedRoleId(expandedRoleId === role.id ? null : role.id)}
+                        onUpdate={(patch) => updateRoleMutation.mutate({ roleId: role.id, data: patch })}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {roles.length === 0 && !rolesQuery.isLoading && (
+              <p className="mt-3 text-center text-sm text-muted-foreground">لسه معندكش أي أدوار. ضيف أول دور فوق.</p>
+            )}
+          </section>
+        </div>
       </DialogContent>
     </Dialog>
   );
 }
 
-function PlannerHeader({ onReview, onMission, onRoles }: { onReview: () => void; onMission: () => void; onRoles: () => void }) {
+function AddGoalInline({ onAdd }: { onAdd: (title: string) => void }) {
+  const [title, setTitle] = useState('');
+  const handleAdd = () => {
+    if (!title.trim()) return;
+    onAdd(title.trim());
+    setTitle('');
+  };
+  return (
+    <div className="flex gap-2">
+      <input
+        type="text"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(); }}
+        placeholder="هدف جديد لهذا الدور"
+        className="planner-input flex-1"
+        data-testid="input-new-goal-inline"
+      />
+      <button type="button" onClick={handleAdd} className="planner-button" aria-label="ضيف هدف" data-testid="button-add-goal-inline">
+        <Plus className="size-4" />
+      </button>
+    </div>
+  );
+}
+
+function PlannerHeader({ onReview, onMission }: { onReview: () => void; onMission: () => void }) {
   const { signOut } = useClerk();
   return (
     <div className="mb-6 flex items-start justify-between gap-3" data-testid="planner-header">
@@ -962,7 +1050,6 @@ function PlannerHeader({ onReview, onMission, onRoles }: { onReview: () => void;
         <p className="mt-1 text-sm text-muted-foreground" data-testid="text-planner-subtitle">الأدوار ← الأهداف ← الجدول ← التكيف اليومي</p>
       </div>
       <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
-        <button type="button" onClick={onRoles} className="planner-button whitespace-nowrap" data-testid="button-open-roles">الأدوار</button>
         <button type="button" onClick={onMission} className="planner-button whitespace-nowrap" data-testid="button-open-mission">رسالتي الشخصية</button>
         <button type="button" onClick={onReview} className="planner-button whitespace-nowrap" data-testid="button-open-review">مراجعة الأسبوع</button>
         <button type="button" onClick={() => void signOut({ redirectUrl: basePath || '/' })} className="planner-button inline-flex items-center gap-1.5 text-muted-foreground" data-testid="button-sign-out"><LogOut className="size-3.5" /><span className="hidden sm:inline">خروج</span></button>
