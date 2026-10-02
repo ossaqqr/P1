@@ -18,6 +18,8 @@ tags:
     description: Life roles management
   - name: weeklyPlan
     description: Weekly goals and tasks
+  - name: principles
+    description: Individually managed personal principles
 paths:
   /healthz:
     get:
@@ -341,6 +343,86 @@ paths:
           description: Unauthorized
         "404":
           description: Task not found
+  /principles:
+    get:
+      operationId: listPrinciples
+      tags: [principles]
+      summary: List all of the user's principles, ordered
+      responses:
+        "200":
+          description: Principles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Principle"
+        "401":
+          description: Unauthorized
+    post:
+      operationId: createPrinciple
+      tags: [principles]
+      summary: Add a new principle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePrincipleInput"
+      responses:
+        "200":
+          description: Created principle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Principle"
+        "401":
+          description: Unauthorized
+  /principles/{principleId}:
+    patch:
+      operationId: updatePrinciple
+      tags: [principles]
+      summary: Update a principle's text or order
+      parameters:
+        - name: principleId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePrincipleInput"
+      responses:
+        "200":
+          description: Updated principle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Principle"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Principle not found
+    delete:
+      operationId: deletePrinciple
+      tags: [principles]
+      summary: Delete a principle
+      parameters:
+        - name: principleId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Unauthorized
+        "404":
+          description: Principle not found
 components:
   schemas:
     HealthStatus:
@@ -636,3 +718,27 @@ components:
           type: string
         isDone:
           type: boolean
+
+    Principle:
+      type: object
+      required: [id, text, sortOrder]
+      properties:
+        id:
+          type: string
+        text:
+          type: string
+        sortOrder:
+          type: number
+    CreatePrincipleInput:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+    UpdatePrincipleInput:
+      type: object
+      properties:
+        text:
+          type: string
+        sortOrder:
+          type: number
