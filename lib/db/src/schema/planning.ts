@@ -16,6 +16,25 @@ export const missionTable = pgTable("mission", {
 export type MissionRecord = typeof missionTable.$inferSelect;
 
 // ---------------------------------------------------------------------------
+// Principles — individual, orderable items (replaces the old free-text
+// principles field on missionTable, which is left in place unused for
+// backward compatibility but no longer read or written by the app).
+// ---------------------------------------------------------------------------
+export const principlesTable = pgTable("principles", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  text: text("text").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});
+
+export type PrincipleRecord = typeof principlesTable.$inferSelect;
+
+// ---------------------------------------------------------------------------
 // Roles — timeless (not week-scoped). A role can be deactivated instead of
 // deleted so historical goals/time blocks that reference it stay meaningful.
 // ---------------------------------------------------------------------------
