@@ -1,0 +1,5 @@
+{
+  "framework": null,
+  "buildCommand": "pnpm --filter @workspace/db run push-force && pnpm run build:vercel",
+  "rewrites": [{ "source": "/api/(.*)", "destination": "/api" }]
+}
