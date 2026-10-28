@@ -6,9 +6,11 @@ import { setBaseUrl } from '@workspace/api-client-react';
 
 import './index.css';
 
-if (import.meta.env.VITE_API_BASE_URL) {
-  setBaseUrl(import.meta.env.VITE_API_BASE_URL);
-}
+// The API server is its own Vercel project. This URL is public (not a secret),
+// so it lives in code instead of an environment variable: Vercel now blocks
+// saving VITE_-prefixed variables, and a stale value there would silently
+// point the site at a server that no longer exists.
+setBaseUrl('https://p1-qbt3-two.vercel.app');
 
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
